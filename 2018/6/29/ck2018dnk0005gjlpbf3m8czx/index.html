@@ -1,0 +1,197 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta http-equiv="content-type" content="text/html; charset=utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="description" content="这里记录了我本人的计算机技术书籍的笔记，一些自己个人的记录"><title>http客户端缓存机制与Spring boot下的服务器配置 | 雨痕的个人博客</title><link rel="stylesheet" type="text/css" href="/css/style.css?v=0.0.0"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/normalize/8.0.0/normalize.min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/1.0.0/pure-min.css"><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/pure/1.0.0/grids-responsive-min.css"><link rel="stylesheet" href="//cdn.bootcss.com/font-awesome/4.7.0/css/font-awesome.min.css"><script type="text/javascript" src="//cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script><link rel="Shortcut Icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png"></head><body><div class="body_container"><div id="header"><div class="site-name"><h1 class="hidden">http客户端缓存机制与Spring boot下的服务器配置</h1><a id="logo" href="/.">雨痕的个人博客</a><p class="description">雨晗的丈夫</p></div><div id="nav-menu"><a class="current" href="/."><i class="fa fa-home"> 首页</i></a><a href="/archives/"><i class="fa fa-archive"> 归档</i></a><a href="/about/"><i class="fa fa-user"> 关于</i></a><a href="/atom.xml"><i class="fa fa-rss"> 订阅</i></a></div></div><div class="pure-g" id="layout"><div class="pure-u-1 pure-u-md-3-4"><div class="content_container"><div class="post"><h1 class="post-title">http客户端缓存机制与Spring boot下的服务器配置</h1><div class="post-meta">Jun 29, 2018<span> | </span><span class="category"><a href="/categories/互联网技术/">互联网技术</a></span><script src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js" async></script><span id="busuanzi_container_page_pv"> | <span id="busuanzi_value_page_pv"></span><span> 阅读</span></span></div><div class="clear"><div class="toc-article" id="toc"><div class="toc-title">文章目录</div><ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#为什么需要浏览器客户端缓存"><span class="toc-number">1.</span> <span class="toc-text">为什么需要浏览器客户端缓存</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#与缓存相关的主要的header"><span class="toc-number">2.</span> <span class="toc-text">与缓存相关的主要的header</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#header的详细解释与实践"><span class="toc-number">3.</span> <span class="toc-text">header的详细解释与实践</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#Pragma头"><span class="toc-number">3.1.</span> <span class="toc-text">Pragma头</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Expires头"><span class="toc-number">3.2.</span> <span class="toc-text">Expires头</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Cache-Control"><span class="toc-number">3.3.</span> <span class="toc-text">Cache-Control</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#Last-Modified、If-Modified-Since、If-UnModified-Since头"><span class="toc-number">3.4.</span> <span class="toc-text">Last-Modified、If-Modified-Since、If-UnModified-Since头</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#ETag、If-Match-、If-None-Match"><span class="toc-number">3.5.</span> <span class="toc-text">ETag、If-Match 、If-None-Match</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#spring-boot静态资源缓存配置"><span class="toc-number">4.</span> <span class="toc-text">spring-boot静态资源缓存配置</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#总结"><span class="toc-number">5.</span> <span class="toc-text">总结</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#结语"><span class="toc-number">6.</span> <span class="toc-text">结语</span></a></li></ol></div></div><div class="post-content"><p>本文主要对HTTP的缓存控制的相关的头的功能进行了说明，还对spring-boot的配置进行简短的介绍。</p>
+<h3 id="为什么需要浏览器客户端缓存"><a href="#为什么需要浏览器客户端缓存" class="headerlink" title="为什么需要浏览器客户端缓存"></a>为什么需要浏览器客户端缓存</h3><p>通过浏览器访问远程服务的资源时，通常浏览器会与远程服务器进行多次交互，比如获取图片、js、css文件等，并且，获取这些文件请求往往都是幂等的，重复的进行这些连接或造成整体资源访问的延时，拖延了浏览器可以使用和处理内容的时间，同时也增加了访问者的数据成本。因此，如果把这些不太频繁变化的文件缓存起来，提供给后面相同的链接使用，就可以有效减少访问延迟与网络带宽消耗；可以让资源的访问具有更高的响应性；就是上，我们称这种缓存为浏览器缓存，或者HTTP缓存，其原理就是：当我们浏览网站的时候，在本地机器存储网站的副本，下次访问同个网址的时候可以不再连接服务器，直接使用本地的缓存。服务器端程序可以通过 HTTP协议的 Cache相关的Header来控制本地的缓存行为，减轻服务器的负担。</p>
+<h3 id="与缓存相关的主要的header"><a href="#与缓存相关的主要的header" class="headerlink" title="与缓存相关的主要的header"></a>与缓存相关的主要的header</h3><p>这个几个header总结了一个表格如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">header</th>
+<th style="text-align:left">req/res</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">Expires</td>
+<td style="text-align:left">response</td>
+<td style="text-align:left">指明资源的过期日期</td>
+</tr>
+<tr>
+<td style="text-align:left">Cache-Control</td>
+<td style="text-align:left">request/response</td>
+<td style="text-align:left">缓存控制字段</td>
+</tr>
+<tr>
+<td style="text-align:left">Pragma</td>
+<td style="text-align:left">request/response</td>
+<td style="text-align:left">是否缓存</td>
+</tr>
+<tr>
+<td style="text-align:left">ETag</td>
+<td style="text-align:left">request/response</td>
+<td style="text-align:left">资源的版本的标识符</td>
+</tr>
+<tr>
+<td style="text-align:left">If-Match</td>
+<td style="text-align:left">request</td>
+<td style="text-align:left">与ETag配合使用，匹配Etag值</td>
+</tr>
+<tr>
+<td style="text-align:left">If-None-Match</td>
+<td style="text-align:left">reqeust</td>
+<td style="text-align:left">与ETag配合使用，配置Etag值</td>
+</tr>
+<tr>
+<td style="text-align:left">If-Modified-Since</td>
+<td style="text-align:left">request</td>
+<td style="text-align:left">与Last-Modified配合使用</td>
+</tr>
+<tr>
+<td style="text-align:left">Last-Modified</td>
+<td style="text-align:left">response</td>
+<td style="text-align:left">请求资源的最近的修改时间</td>
+</tr>
+<tr>
+<td style="text-align:left">If-Unmodified-Since</td>
+<td style="text-align:left">request</td>
+<td style="text-align:left">与Last-Modified配合使用</td>
+</tr>
+</tbody>
+</table>
+<h3 id="header的详细解释与实践"><a href="#header的详细解释与实践" class="headerlink" title="header的详细解释与实践"></a>header的详细解释与实践</h3><h4 id="Pragma头"><a href="#Pragma头" class="headerlink" title="Pragma头"></a>Pragma头</h4><p>在HTTP1.0中规定的通用首部，用来兼容只支持HTTP/1.0的服务器；它的值是空或者no-cache，空时代表可以缓存，no-cache时代表可以缓存，与Cache-Control:no-cache等价，但是当2个header同时出现时，pragma具有更高的优先级。</p>
+<h4 id="Expires头"><a href="#Expires头" class="headerlink" title="Expires头"></a>Expires头</h4><p>包含过期时间，只会出现在response中，value=0的时候就是已过期，是兼容HTTP/1.0设置。</p>
+<h4 id="Cache-Control"><a href="#Cache-Control" class="headerlink" title="Cache-Control"></a>Cache-Control</h4><p>在request与response中都会出现，在request中的主要字段含义如下表：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">字段</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">max-age=&lt;seconds&gt;</td>
+<td style="text-align:left">告知服务器客户端希望接收不大于seconds的资源</td>
+</tr>
+<tr>
+<td style="text-align:left">max-stale[=&lt;seconds&gt;]</td>
+<td style="text-align:left">客户端可以获取已经过期的资源。 只要资源不超过指定的过时时间</td>
+</tr>
+<tr>
+<td style="text-align:left">min-fresh=&lt;seconds&gt;</td>
+<td style="text-align:left">表示客户端在指定的时间内需要获取最新的响应</td>
+</tr>
+<tr>
+<td style="text-align:left">no-cache</td>
+<td style="text-align:left">请求都提交给原始服务器进行验证</td>
+</tr>
+<tr>
+<td style="text-align:left">no-store</td>
+<td style="text-align:left">缓存不应存储有关客户端请求或服务器响应的任何内容，包括浏览器的缓存文件夹也不能存储</td>
+</tr>
+<tr>
+<td style="text-align:left">no-transform</td>
+<td style="text-align:left">不得对资源进行转换或转变，比如代理服务器的压缩等操作</td>
+</tr>
+<tr>
+<td style="text-align:left">only-if-cached</td>
+<td style="text-align:left">客户端去缓存中取资源，不要向原始服务器检查是否有更新的拷贝</td>
+</tr>
+</tbody>
+</table>
+<p>在response中的字段如下表：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">字段</th>
+<th style="text-align:left">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">max-age=&lt;seconds&gt;</td>
+<td style="text-align:left">资源的过期时间，这个是相对于请求发出的时间，与expires存在不同，改进了expires的缺点</td>
+</tr>
+<tr>
+<td style="text-align:left">max-stale[=&lt;seconds&gt;]</td>
+<td style="text-align:left">客户端可以获取已经过期的资源。 只要资源不超过指定的过时时间</td>
+</tr>
+<tr>
+<td style="text-align:left">no-cache</td>
+<td style="text-align:left">资源不缓存，后续相同的请求都提交给原始服务器获取</td>
+</tr>
+<tr>
+<td style="text-align:left">no-store</td>
+<td style="text-align:left">资源不会被缓存，包括浏览器的缓存文件夹也不能存储</td>
+</tr>
+<tr>
+<td style="text-align:left">no-transform</td>
+<td style="text-align:left">不得对资源进行转换或转变，比如代理服务器的压缩等操作</td>
+</tr>
+<tr>
+<td style="text-align:left">must-revalidate</td>
+<td style="text-align:left">指定客户端在使用缓存前必须校验缓存的状态，并且不能使用过期的资源</td>
+</tr>
+<tr>
+<td style="text-align:left">public</td>
+<td style="text-align:left">资源可以被任何节点缓存，包括不同的用户</td>
+</tr>
+<tr>
+<td style="text-align:left">private</td>
+<td style="text-align:left">资源只能被单个用户缓存，不能作为共享缓存，就是代理服务器不能缓存，浏览器缓存是私有缓存，代理服务器缓存是共享缓存，有这2个分类</td>
+</tr>
+<tr>
+<td style="text-align:left">proxy-revalidate</td>
+<td style="text-align:left">是指共享缓存在使用时必须要验证</td>
+</tr>
+<tr>
+<td style="text-align:left">s-maxage=&lt;seconds&gt;</td>
+<td style="text-align:left">共享缓存中的过期时限设置</td>
+</tr>
+</tbody>
+</table>
+<p>上面的一些字段可以组合使用，必须要注意的是，目前HTTP缓存只针对GET请求有效，其他请求方法不能缓存。</p>
+<h4 id="Last-Modified、If-Modified-Since、If-UnModified-Since头"><a href="#Last-Modified、If-Modified-Since、If-UnModified-Since头" class="headerlink" title="Last-Modified、If-Modified-Since、If-UnModified-Since头"></a>Last-Modified、If-Modified-Since、If-UnModified-Since头</h4><p>这几个头都与缓存更新有关系，是一个响应首部，其中包含源头服务器认定的资源做出修改的日期及时间。 它通常被用作一个验证器来判断接收到的或者存储的资源是否彼此一致。由于精确度比  ETag 要低，所以这是一个备用机制。  If-Modified-Since 或 If-Unmodified-Since 首部的条件请求会使用这个字段。</p>
+<ol>
+<li>If-Modified-Since是一个条件首部，使用的值是资源响应中的Last-Modified，请求发出时，会到服务器去确认是否更新，服务器确认最后更新时间一致，返回一个304状态码，此时请求就可以做直接使用缓存中的资源，假如时间不一致，则代表了服务器资源可能进行了更新，此时服务器返回最新的资源并返回200状态码； If-Modified-Since 只可以用在 GET 或 HEAD 请求中，并且它的优先级低于If-None-Match，因为If-None-Match的确认机制更为精确。</li>
+<li>If-Unmodified-Since，这个头与If-Modified-Since的使用方式是类似的，但是处理机制却不同，如果最后的修改时间没匹配上，则返回412；匹配上直接返回资源并200响应码。</li>
+</ol>
+<h4 id="ETag、If-Match-、If-None-Match"><a href="#ETag、If-Match-、If-None-Match" class="headerlink" title="ETag、If-Match 、If-None-Match"></a>ETag、If-Match 、If-None-Match</h4><p>Etag头是为改进Last-Modified缓存控制方式的不足提出来的，主要的不不足有2个方面：</p>
+<ul>
+<li>修改改了资源，但是没改变内容，Last-Modified时间改变，此时会完整返回响应；</li>
+<li>Last-Modified相关的首部缓存控制只能用于GET/HEAD方法，在其他的HTTP方法中失效</li>
+<li>并发更新的内容，向服务器POST时，此时Last-Modified检测失效，后面的更新会覆盖前面的更新，称为“空中碰撞”。</li>
+</ul>
+<p>ETag可以提供资源的指纹，并且能够避免“空中碰撞”，具有更改的优先级；现在看下3个头的含义：</p>
+<ul>
+<li>ETag是资源的特定版本的标识符，检测内容是否发生了变化，如果内容发生了变化，要生成新的Etag值。有时候生成的ETag值开头又一个“W/”字符，代表的是要使用弱验证器；</li>
+<li>If-Match是与ETag配合使用，当请求方法为 GET 和 HEAD 的情况下，当版本匹配时服务器返回请求的资源，否则返回412。而对于 PUT、POST 或其他非安全方法来说，只有在满足条件的情况下才可以将资源上传。ETag 之间的比较使用的是强比较算法，即只有在每一个比特都相同的情况下，才可以认为两个文件是相同的。在 ETag 前面添加W/ 前缀表示可以采用相对宽松的算法；</li>
+<li>If-None-Match 当请求的方式是GET 和 HEAD 时，服务器上没有任何资源的 ETag 属性值与这个首部中列出的相匹配的时候，服务器端会才返回所请求的资源，响应码为  200 ，否则返回304，也就是可以直接使用缓存；对于其他方法来说，当且仅当最终确认没有已存在的资源的  ETag 属性值与这个首部中所列出的相匹配的时候，才会对请求进行相应的处理，有的话返回412。</li>
+</ul>
+<p>需要注意的是浏览器在地址栏发起请求、刷新、强制刷新下都有自定义的行为，不会完全遵守资源的response中设置的值；在FireFox浏览器测试下，当在地址栏发起请求的时候，浏览器只会检测资源响应中的Expires与Cache-Control值，如果没过期，则直接取缓存资源完成响应；所以我们在开发工具栏看到的是200(from memory cache、from disk等)；如果使用浏览器的刷新功能，此时浏览器会在请求上加上If-Modified-Since或者If-None-Match头部，并向远程服务器发起一次请求，此时我们看到返回码就是304；如果是强制刷新，此时浏览器会在请求上加入pragma: no-cache或者Cache-Control: no-cache头部，强制服务器返回最新的资源；在Chrome浏览器测试下，它的刷新与在浏览器地址栏上输入地址的请求行为与FireFox是不同的，它的行为是完全一致的，并且输入的地址资源都去远程服务器确认了资源的更新情况，所以返回了304；但是发起的其他的资源请求使用的是Expires与Cache-Control的缓存控制机制，所以看到的是返回200。</p>
+<h3 id="spring-boot静态资源缓存配置"><a href="#spring-boot静态资源缓存配置" class="headerlink" title="spring-boot静态资源缓存配置"></a>spring-boot静态资源缓存配置</h3><p>这部分主要记录下在spring-boot环境简单配置缓存相关的响应头。当我们请求的是Spring MVC的Controller相关的请求路径时，Controller可以通过继承AbstarctController设置缓存相关的头，实现LastModified接口来进行缓存的更新控制，或者在应用加入ShallowEtagHeaderFilter这个Filter来执行Etag检查等相关的配置，Controller层的缓存控制的内容超出了本文的内容范围，下面的部分主要介绍下在spring-boot项目下静态资源缓存的简单配置</p>
+<ul>
+<li><p>因为目前Expires头部已经不建议使用，关于它的设置相关的资料也比较少，在Spring boot中也没有专门的参数设置关于静态资源的Expires值，为了能够设置这个值，我选择了在Spring的Interceptor中设置这个值，配置如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Override</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> <span class="keyword">void</span> <span class="title">postHandle</span><span class="params">(HttpServletRequest request, HttpServletResponse response, Object handler,</span></span></span><br><span class="line"><span class="function"><span class="params">        ModelAndView modelAndView)</span> <span class="keyword">throws</span> Exception </span>&#123;</span><br><span class="line">    response.setHeader(HttpHeaders.EXPIRES,</span><br><span class="line">            ZonedDateTime.now().plusYears(<span class="number">100</span>).withZoneSameInstant(ZoneId.of(<span class="string">"GMT"</span>)).format(</span><br><span class="line">                    DateTimeFormatter.ofPattern(<span class="string">"EEE, dd MMM yyyy HH:mm:ss z"</span>, Locale.US)));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>我们看到的效果如下：<br><img src="expires.png" alt="expires_pic"></p>
+</li>
+<li><p>Cache-Control头部的设置，这个头部的配置比较简单，在spring-boot的application文件中配置就可以，在spring-boot1.5版本中，可以使用spring.resources.cache-period参数配置，默认的时间单位是秒，当设置max-age=8000时，可以看到返回的响应如下：<br><img src="cachecontrolnosecurity.png" alt="cachecontrolnosecurity"><br>暂时没有发现可以通过spring-boot的配置把Cache-Control配置成别的值，当然也可以通过Interceptor的方式设置为别的值，在spring-boot的版本在2.0以上时，就没有了spring.resources.cache-period参数，改为了spring.resources.cache.period参数，需要注意的是上面的设置在有spring-security模块的时候会不起作用，可能是因为spring-security的模块在处理请求与响应的时候会把Cache-Control重置为no-cache，并且设置了Pragma: no-cahe等；经过测试后，发现spring-boot提供了其他的方法设置Cache-Control的相关的参数，这些参数spring.resource.cache.cachecontrol开头，可以设置max-age、public、private等组合属性，会覆盖spring.resources.cache.period参数的值,并且不会被spring-security的机制覆盖；比如：</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">spring:</span></span><br><span class="line"><span class="attr">  resources:</span></span><br><span class="line"><span class="attr">    cache:</span></span><br><span class="line"><span class="attr">      cachecontrol:</span></span><br><span class="line"><span class="attr">        no-cache:</span> <span class="literal">false</span></span><br><span class="line"><span class="attr">        no-store:</span> <span class="literal">false</span></span><br><span class="line"><span class="attr">        max-age:</span> <span class="number">7</span><span class="string">d</span></span><br><span class="line"><span class="attr">        cache-public:</span> <span class="literal">true</span></span><br></pre></td></tr></table></figure>
+<p>这个设置的就是静态资源需要缓存，浏览器的临时文件夹也需要缓存；缓存的时间是相对于请求时间开始的7天；并且，代理服务器也要缓存资源。</p>
+</li>
+<li>Last-Modified响应头等不需要明显的配置，因为返回资源的时候，spring-mvc会返回资源的Last-Modified，spring-mvc在收到If-Modified-Since等请求的头部时会自动在mvc缺省配置的ResourceHandler链中处理。</li>
+<li><p>Etag静态资源的处理也是使用的spring-mvc的ShallowEtagHeaderFilter，这个Filter使用md5的方式更具访问资源的内容生成弱验证器的Etag值，经过测试是成功的，其原理还有待于深入研究，需要注意的是加入项目中加入了spring-security模块后，这个Filter可能会失效，此时需要加入：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">http.headers().disable();</span><br></pre></td></tr></table></figure>
+<p>配置如下：</p>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@Bean</span></span><br><span class="line"><span class="function"><span class="keyword">public</span> FilterRegistrationBean <span class="title">shallowEtagBean</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    FilterRegistrationBean filterRegistrationBean = <span class="keyword">new</span> FilterRegistrationBean();</span><br><span class="line">    filterRegistrationBean.setFilter(<span class="keyword">new</span> ShallowEtagHeaderFilter());</span><br><span class="line">    filterRegistrationBean.addUrlPatterns(<span class="string">"/pic/*"</span>);</span><br><span class="line">    <span class="keyword">return</span> filterRegistrationBean;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>可以看到下图中的Etag值。<br><img src="etag_pic.png" alt="etag_pic"></p>
+</li>
+</ul>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>本文在说明了HTTP缓存的重要性后，接下来对相关的HTTP缓存相关的头进行了说明，主要分为3类：</p>
+<ul>
+<li>过期时间相关的头，主要有pragma、cache-control-expires；</li>
+<li>更新时间验证相关的头，主要有Last-Modified等；</li>
+<li>资源散列验证相关的头，主要有ETag等；</li>
+</ul>
+<p>最重要的就是Cache-Control头，这个头里面还有非常多的参数控制。<br>后面，主要讲解了spring-boot环境下，静态资源的缓存相关的配置参数，都是比较简单的；通过IDE工具的提示功能即可以填写完整。</p>
+<h3 id="结语"><a href="#结语" class="headerlink" title="结语"></a>结语</h3><p>经过一段时间对HTTP缓存相关知识的学习研究，真的是觉的计算机领域的知识是如烟似海；每个领域中的每个细节都是前辈们的聪明才智的结晶，都需要我们后辈们努力学些，也都值得深入的研究去发现理解它们表达的思想。</p>
+</div><iframe src="/donate/?AliPayQR=null&amp;WeChatQR=null&amp;GitHub=null&amp;BTCQR=null&amp;BTCKEY=null&amp;PayPal=null" style="overflow-x:hidden; overflow-y:hidden; border:0xp none #fff; min-height:240px; width:100%;" frameborder="0" scrolling="no"></iframe><div><ul class="post-copyright"><li class="post-copyright-author"><strong>本文作者：</strong>张永祥</li><li class="post-copyright-link"><strong>本文链接：</strong><a href="/2018/6/29/ck2018dnk0005gjlpbf3m8czx/">http://blog.bestzyx.com/2018/6/29/ck2018dnk0005gjlpbf3m8czx/</a></li><li class="post-copyright-license"><strong>版权声明：</strong>The author owns the copyright, please indicate the source reproduced.</li></ul></div><br><div class="tags"><a href="/tags/http/">http</a><a href="/tags/cache/">cache</a></div><div class="post-nav"><a class="pre" href="/2018/7/19/ck2018dnb0000gjlpdyuvoku0/">Mongodb集群化配置</a><a class="next" href="/2018/6/27/ck2018dnq0009gjlpuo4k62wc/">node.js 简介</a></div></div></div></div><div class="pure-u-1 pure-u-md-1-4"><div id="sidebar"><div class="widget"><form class="search-form" action="//www.google.com/search" method="get" accept-charset="utf-8" target="_blank"><input type="text" name="q" maxlength="20" placeholder="Search"/><input type="hidden" name="sitesearch" value="http://blog.bestzyx.com"/></form></div><div class="widget"><div class="widget-title"><i class="fa fa-folder-o"> 分类</i></div><ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/互联网技术/">互联网技术</a><span class="category-list-count">6</span></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-star-o"> 标签</i></div><div class="tagcloud"><a href="/tags/mongodb/" style="font-size: 15px;">mongodb</a> <a href="/tags/cluster/" style="font-size: 15px;">cluster</a> <a href="/tags/mysql/" style="font-size: 15px;">mysql</a> <a href="/tags/git/" style="font-size: 15px;">git</a> <a href="/tags/版本控制系统/" style="font-size: 15px;">版本控制系统</a> <a href="/tags/http/" style="font-size: 15px;">http</a> <a href="/tags/cache/" style="font-size: 15px;">cache</a> <a href="/tags/java/" style="font-size: 15px;">java</a> <a href="/tags/面向对象/" style="font-size: 15px;">面向对象</a> <a href="/tags/设计模式/" style="font-size: 15px;">设计模式</a></div></div><div class="widget"><div class="widget-title"><i class="fa fa-file-o"> 最近文章</i></div><ul class="post-list"><li class="post-list-item"><a class="post-list-link" href="/2019/10/12/ck2018dnj0004gjlp5fquvhbj/">git内部原理(一)</a></li><li class="post-list-item"><a class="post-list-link" href="/2018/11/20/ck2018dnf0001gjlpjylibdzq/">MySQL集群配置方法</a></li><li class="post-list-item"><a class="post-list-link" href="/2018/11/20/ck2018dns000agjlpb0b8lp4t/">设计模式6大原则</a></li><li class="post-list-item"><a class="post-list-link" href="/2018/10/10/ck2018dnn0006gjlp8p52gzj0/">MySQL集群配置方法</a></li><li class="post-list-item"><a class="post-list-link" href="/2018/7/19/ck2018dnb0000gjlpdyuvoku0/">Mongodb集群化配置</a></li><li class="post-list-item"><a class="post-list-link" href="/2018/6/29/ck2018dnk0005gjlpbf3m8czx/">http客户端缓存机制与Spring boot下的服务器配置</a></li><li class="post-list-item"><a class="post-list-link" href="/2018/6/27/ck2018dnq0009gjlpuo4k62wc/">node.js 简介</a></li></ul></div><div class="widget"><div class="widget-title"><i class="fa fa-external-link"> 友情链接</i></div><ul></ul><a href="http://www.baidu.com/" title="Baidu" target="_blank">Baidu</a><ul></ul><a href="http://www.google.com/" title="Google" target="_blank">Google</a><ul></ul><a href="http://www.csdn.com/" title="CSDN" target="_blank">CSDN</a></div></div></div><div class="pure-u-1 pure-u-md-3-4"><div id="footer">Copyright © 2019 <a href="/." rel="nofollow">雨痕的个人博客.</a> Powered by<a rel="nofollow" target="_blank" href="https://hexo.io"> Hexo.</a><a rel="nofollow" target="_blank" href="https://github.com/tufu9441/maupassant-hexo"> Theme</a> by<a rel="nofollow" target="_blank" href="https://github.com/pagecho"> Cho.</a></div></div></div><a class="show" id="rocket" href="#top"></a><script type="text/javascript" src="/js/totop.js?v=0.0.0" async></script><script type="text/javascript" src="//cdn.bootcss.com/fancybox/3.3.5/jquery.fancybox.min.js" async></script><script type="text/javascript" src="/js/fancybox.js?v=0.0.0" async></script><link rel="stylesheet" type="text/css" href="//cdn.bootcss.com/fancybox/3.3.5/jquery.fancybox.min.css"><script type="text/javascript" src="/js/codeblock-resizer.js?v=0.0.0"></script><script type="text/javascript" src="/js/smartresize.js?v=0.0.0"></script></div></body></html>
